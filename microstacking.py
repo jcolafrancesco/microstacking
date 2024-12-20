@@ -397,9 +397,11 @@ def main():
     image_frame = ttk.Frame(window, padding="10", style="Black.TFrame")
     image_frame.pack(side=tk.RIGHT, padx=10, pady=10, expand=True, fill=tk.BOTH)
 
-    # Create a label for displaying the full image
-    full_image_label = ttk.Label(image_frame)
-    full_image_label.pack(expand=True)
+    # Create a canvas for displaying the full image
+    full_image_canvas = tk.Canvas(image_frame)
+    full_image_canvas.pack(expand=True, fill=tk.BOTH)
+    streaming_image = full_image_canvas.create_image(0, 0, anchor="center", image=None)
+    full_image_canvas.photo = None  # Keep a reference to the PhotoImage object
 
     current_image_path = None
     last_selected_image_path = None
@@ -407,7 +409,7 @@ def main():
 
     def show_full_image(image_path):
         nonlocal current_image_path, last_selected_image_path
-        if not camera_preview_active and image_path != current_image_path:
+        if not camera_preview_active:
             current_image_path = image_path
             last_selected_image_path = image_path
             image = Image.open(image_path)
@@ -431,9 +433,9 @@ def main():
 
             resized_image = image.resize((new_width, new_height), Image.LANCZOS)
             photo = ImageTk.PhotoImage(resized_image)
-            full_image_label.config(image=photo)
-            full_image_label.image = photo
-            full_image_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)  # Center the image
+            full_image_canvas.itemconfig(streaming_image, image=photo)
+            full_image_canvas.coords(streaming_image, frame_width // 2, frame_height // 2)  # Center the image
+            full_image_canvas.photo = photo  # Keep a reference to the PhotoImage object
 
     def schedule_final_resize():
         nonlocal resize_timer
@@ -454,12 +456,12 @@ def main():
             except gp.GPhoto2Error as e:
                 if e.code == gp.GP_ERROR_IO:
                     print(f"Failed to capture preview: {e}")
-                    window.after(100, update_camera_preview)  # Wait a bit before retrying
+                    window.after(200, update_camera_preview)  # Wait a bit before retrying
                 else:
                     print(f"Failed to capture preview: {e}")
             except Exception as e:
                 print(f"Unexpected error: {e}")
-            window.after(50, update_camera_preview)  # Schedule next update in 50ms (20 times per second)
+            window.after(round(1000/30), update_camera_preview)  # Increase interval to 200ms
         else:
             if last_selected_image_path:
                 show_full_image(last_selected_image_path)
