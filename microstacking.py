@@ -41,12 +41,12 @@ def main():
         else:
             camera_button.config(text="Start Preview")
             print("Camera preview deactivated")
-            if current_image_path:
-                show_full_image(current_image_path)
+            if last_selected_image_path:
+                show_full_image(last_selected_image_path)
 
     def capture_and_process_image():
         file_path = capture_image()
-        process_captured_image(file_path, "singles")
+        process_captured_image(file_path, "Singles")
 
     def capture_image():
         try:
@@ -82,20 +82,25 @@ def main():
         image.thumbnail((100, 100))
         photo = ImageTk.PhotoImage(image)
         parent_folder = os.path.basename(os.path.dirname(image_path))
+        if parent_folder == "Capture":
+            parent_folder = os.path.basename(os.path.dirname(os.path.dirname(image_path)))
         if parent_folder not in treeview.image_dict:
             parent_id = treeview.insert('', 'end', text=parent_folder, open=True)
             treeview.image_dict[parent_folder] = parent_id
         else:
             parent_id = treeview.image_dict[parent_folder]
-        treeview.insert(parent_id, 'end', text=image_path)
+        new_item = treeview.insert(parent_id, 'end', text=image_path)
         treeview.image_dict[image_path] = photo
+        treeview.selection_set(new_item)
+        treeview.see(new_item)
 
     def select_image_in_treeview(image_path):
-        for item in treeview.get_children():
-            if treeview.item(item, "text") == image_path:
-                treeview.selection_set(item)
-                treeview.see(item)
-                break
+        if os.path.isfile(image_path):
+            for item in treeview.get_children():
+                if treeview.item(item, "text") == image_path:
+                    treeview.selection_set(item)
+                    treeview.see(item)
+                    break
 
     capture_button = ttk.Button(camera_frame, text="Capture", command=capture_and_process_image, width=15)
     capture_button.grid(row=0, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
@@ -368,7 +373,7 @@ def main():
         pre_shot_delay = int(pre_shot_delay_spinbox.get())
         pre_focus_delay = int(pre_focus_delay_spinbox.get())
         angle = int(angle_stacking_spinbox.get())
-        stack_folder = os.path.join("Capture", f"Stack_{time.strftime('%Y%m%d_%H%M%S')}")
+        stack_folder = f"Stack_{time.strftime('%Y%m%d_%H%M%S')}"
         os.makedirs(stack_folder, exist_ok=True)
         send_command_to_arduino("A")
         launch_button.config(style="Green.TButton")
@@ -409,7 +414,7 @@ def main():
     image_frame.pack(side=tk.RIGHT, padx=10, pady=10, expand=True, fill=tk.BOTH)
 
     # Create a canvas for displaying the full image
-    full_image_canvas = tk.Canvas(image_frame)
+    full_image_canvas = tk.Canvas(image_frame, background="black", bd=0, highlightthickness=0)
     full_image_canvas.pack(expand=True, fill=tk.BOTH)
     streaming_image = full_image_canvas.create_image(0, 0, anchor="center", image=None)
     full_image_canvas.photo = None  # Keep a reference to the PhotoImage object
@@ -420,7 +425,7 @@ def main():
 
     def show_full_image(image_path):
         nonlocal current_image_path, last_selected_image_path
-        if not camera_preview_active:
+        if not camera_preview_active and os.path.isfile(image_path):
             current_image_path = image_path
             last_selected_image_path = image_path
             image = Image.open(image_path)
@@ -442,11 +447,12 @@ def main():
                 new_width = frame_width
                 new_height = int(new_width / image_ratio)
 
-            resized_image = image.resize((new_width, new_height), Image.LANCZOS)
-            photo = ImageTk.PhotoImage(resized_image)
-            full_image_canvas.itemconfig(streaming_image, image=photo)
-            full_image_canvas.coords(streaming_image, frame_width // 2, frame_height // 2)  # Center the image
-            full_image_canvas.photo = photo  # Keep a reference to the PhotoImage object
+            if new_width > 0 and new_height > 0:
+                resized_image = image.resize((new_width, new_height), Image.LANCZOS)
+                photo = ImageTk.PhotoImage(resized_image)
+                full_image_canvas.itemconfig(streaming_image, image=photo)
+                full_image_canvas.coords(streaming_image, frame_width // 2, frame_height // 2)  # Center the image
+                full_image_canvas.photo = photo  # Keep a reference to the PhotoImage object
 
     def schedule_final_resize():
         nonlocal resize_timer
@@ -480,25 +486,40 @@ def main():
     # Load and display images from the specified folder
     image_folder = "Capture"
     def load_images_from_folder(folder):
+        singles_id = None
+        folder_dict = {}
         for root, _, files in os.walk(folder):
             parent_folder = os.path.basename(root)
-            if parent_folder not in treeview.image_dict:
-                parent_id = treeview.insert('', 'end', text=parent_folder, open=True)
-                treeview.image_dict[parent_folder] = parent_id
-            else:
-                parent_id = treeview.image_dict[parent_folder]
+            if parent_folder == "Capture":
+                parent_folder = os.path.basename(os.path.dirname(root))
+            if parent_folder not in folder_dict:
+                folder_dict[parent_folder] = []
             for file in files:
-                if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.cr2')):
+                if os.path.isfile(os.path.join(root, file)) and file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.cr2')):
                     image_path = os.path.join(root, file)
-                    treeview.insert(parent_id, 'end', text=image_path)
-                    treeview.image_dict[image_path] = ImageTk.PhotoImage(Image.open(image_path))
+                    folder_dict[parent_folder].append(image_path)
+        for parent_folder in sorted(folder_dict.keys()):
+            parent_id = treeview.insert('', 'end', text=parent_folder, open=(parent_folder == "Singles"))
+            treeview.image_dict[parent_folder] = parent_id
+            if parent_folder == "Singles":
+                singles_id = parent_id
+            for image_path in folder_dict[parent_folder]:
+                treeview.insert(parent_id, 'end', text=image_path)
+                treeview.image_dict[image_path] = ImageTk.PhotoImage(Image.open(image_path))
+        return singles_id
 
-    load_images_from_folder(image_folder)
+    singles_id = load_images_from_folder(image_folder)
 
     def display_first_image():
-        if treeview.get_children():
+        if singles_id and treeview.get_children(singles_id):
+            first_image_path = treeview.item(treeview.get_children(singles_id)[0], "text")
+            show_full_image(first_image_path)
+            treeview.selection_set(treeview.get_children(singles_id)[0])
+            treeview.see(treeview.get_children(singles_id)[0])
+        elif treeview.get_children():
             first_image_path = treeview.item(treeview.get_children()[0], "text")
             show_full_image(first_image_path)
+            select_image_in_treeview(first_image_path)
 
     window.after(100, display_first_image)  # Display the first image after the window is initialized
 
