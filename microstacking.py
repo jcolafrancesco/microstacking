@@ -528,13 +528,13 @@ def main():
     pre_shot_delay_label = ttk.Label(stacking_frame, text="Pre-Shot Delay: ", width=17, anchor=tk.E)
     pre_shot_delay_label.grid(row=1, column=0, pady=5, sticky=tk.W)
     pre_shot_delay_spinbox = ttk.Spinbox(stacking_frame, from_=0, to=60, increment=1, width=10)
-    pre_shot_delay_spinbox.set(2)  # Default value
+    pre_shot_delay_spinbox.set(1)  # Default value
     pre_shot_delay_spinbox.grid(row=1, column=1, pady=5, sticky=tk.W)
 
     pre_focus_delay_label = ttk.Label(stacking_frame, text="Pre-Focus Delay: ", width=17, anchor=tk.E)
     pre_focus_delay_label.grid(row=2, column=0, pady=5, sticky=tk.W)
     pre_focus_delay_spinbox = ttk.Spinbox(stacking_frame, from_=0, to=60, increment=1, width=10)
-    pre_focus_delay_spinbox.set(2)  # Default value
+    pre_focus_delay_spinbox.set(0)  # Default value
     pre_focus_delay_spinbox.grid(row=2, column=1, pady=5, sticky=tk.W)
 
     angle_stacking_label = ttk.Label(stacking_frame, text="Angle (degrees): ", width=17, anchor=tk.E)
