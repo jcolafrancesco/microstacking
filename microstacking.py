@@ -46,7 +46,7 @@ def main():
 
     def capture_and_process_image():
         file_path = capture_image()
-        process_captured_image(file_path)
+        process_captured_image(file_path, "singles")
 
     def capture_image():
         try:
@@ -61,9 +61,11 @@ def main():
         except Exception as e:
             print(f"Unexpected error: {e}")
 
-    def process_captured_image(file_path):
+    def process_captured_image(file_path, folder):
         try:
-            target = os.path.join('Capture', file_path.name)
+            target_folder = os.path.join("Capture", folder)
+            os.makedirs(target_folder, exist_ok=True)
+            target = os.path.join(target_folder, file_path.name)
             camera_file = gp.check_result(gp.gp_camera_file_get(camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL))
             gp.check_result(gp.gp_file_save(camera_file, target))
             print(f"Image saved to {target}")
@@ -79,7 +81,13 @@ def main():
         image = Image.open(image_path)
         image.thumbnail((100, 100))
         photo = ImageTk.PhotoImage(image)
-        treeview.insert('', 'end', text=image_path)
+        parent_folder = os.path.basename(os.path.dirname(image_path))
+        if parent_folder not in treeview.image_dict:
+            parent_id = treeview.insert('', 'end', text=parent_folder, open=True)
+            treeview.image_dict[parent_folder] = parent_id
+        else:
+            parent_id = treeview.image_dict[parent_folder]
+        treeview.insert(parent_id, 'end', text=image_path)
         treeview.image_dict[image_path] = photo
 
     def select_image_in_treeview(image_path):
@@ -333,6 +341,7 @@ def main():
     angle_stacking_spinbox.grid(row=3, column=1, pady=5, sticky=tk.W)
 
     stop_capture = False
+    stack_folder = None
 
     def capture_stack_step(frame_index, num_frames, pre_shot_delay, pre_focus_delay, angle):
         if stop_capture or frame_index >= num_frames:
@@ -343,7 +352,7 @@ def main():
         def capture_next_image():
             file_path = capture_image()
             window.after(round(pre_focus_delay) * 1000, rotate_knob)
-            process_captured_image(file_path)
+            process_captured_image(file_path, stack_folder)
 
         def rotate_knob():
             send_command_to_arduino(f"U{angle}")
@@ -353,12 +362,14 @@ def main():
         window.after(round(pre_shot_delay) * 1000, capture_next_image)
 
     def capture_stack():
-        nonlocal stop_capture
+        nonlocal stop_capture, stack_folder
         stop_capture = False
         num_frames = int(frames_spinbox.get())
         pre_shot_delay = int(pre_shot_delay_spinbox.get())
         pre_focus_delay = int(pre_focus_delay_spinbox.get())
         angle = int(angle_stacking_spinbox.get())
+        stack_folder = os.path.join("Capture", f"Stack_{time.strftime('%Y%m%d_%H%M%S')}")
+        os.makedirs(stack_folder, exist_ok=True)
         send_command_to_arduino("A")
         launch_button.config(style="Green.TButton")
         capture_stack_step(0, num_frames, pre_shot_delay, pre_focus_delay, angle)
@@ -468,16 +479,26 @@ def main():
 
     # Load and display images from the specified folder
     image_folder = "Capture"
-    image_files = [f for f in os.listdir(image_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.cr2'))]
+    def load_images_from_folder(folder):
+        for root, _, files in os.walk(folder):
+            parent_folder = os.path.basename(root)
+            if parent_folder not in treeview.image_dict:
+                parent_id = treeview.insert('', 'end', text=parent_folder, open=True)
+                treeview.image_dict[parent_folder] = parent_id
+            else:
+                parent_id = treeview.image_dict[parent_folder]
+            for file in files:
+                if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.cr2')):
+                    image_path = os.path.join(root, file)
+                    treeview.insert(parent_id, 'end', text=image_path)
+                    treeview.image_dict[image_path] = ImageTk.PhotoImage(Image.open(image_path))
+
+    load_images_from_folder(image_folder)
 
     def display_first_image():
-        if image_files:
-            first_image_path = os.path.join(image_folder, image_files[0])
+        if treeview.get_children():
+            first_image_path = treeview.item(treeview.get_children()[0], "text")
             show_full_image(first_image_path)
-
-    for image_file in image_files:
-        image_path = os.path.join(image_folder, image_file)
-        treeview.insert('', 'end', text=image_path)
 
     window.after(100, display_first_image)  # Display the first image after the window is initialized
 
