@@ -1,20 +1,3 @@
-# 
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 2 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <https://www.gnu.org/licenses/>.
-#
-# Copyright 2024 Julien Colafrancesco
-#
-
 import tkinter as tk
 from tkinter import ttk
 from ttkthemes import ThemedTk
@@ -61,10 +44,25 @@ def main():
             if current_image_path:
                 show_full_image(current_image_path)
 
+    def capture_and_process_image():
+        file_path = capture_image()
+        process_captured_image(file_path)
+
     def capture_image():
         try:
             print("Capturing image")
+            start_time = time.time()
             file_path = gp.check_result(gp.gp_camera_capture(camera, gp.GP_CAPTURE_IMAGE))
+            end_time = time.time()
+            print(f"Time taken to capture image: {end_time - start_time} seconds")
+            return file_path
+        except gp.GPhoto2Error as e:
+            print(f"Failed to capture image: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+
+    def process_captured_image(file_path):
+        try:
             target = os.path.join('Capture', file_path.name)
             camera_file = gp.check_result(gp.gp_camera_file_get(camera, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL))
             gp.check_result(gp.gp_file_save(camera_file, target))
@@ -73,7 +71,7 @@ def main():
             show_full_image(target)  # Display the last image captured
             select_image_in_treeview(target)  # Select the last image captured in the treeview
         except gp.GPhoto2Error as e:
-            print(f"Failed to capture image: {e}")
+            print(f"Failed to process captured image: {e}")
         except Exception as e:
             print(f"Unexpected error: {e}")
 
@@ -91,7 +89,7 @@ def main():
                 treeview.see(item)
                 break
 
-    capture_button = ttk.Button(camera_frame, text="Capture", command=capture_image, width=15)
+    capture_button = ttk.Button(camera_frame, text="Capture", command=capture_and_process_image, width=15)
     capture_button.grid(row=0, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
 
     camera_button = ttk.Button(camera_frame, text="Start Preview", command=toggle_camera_preview, width=15)
@@ -341,10 +339,18 @@ def main():
             send_command_to_arduino("R")
             launch_button.config(style="TButton")
             return
-        rot_time = 2 * angle / 360  # Time to rotate the stage by the specified angle
-        window.after(round(pre_shot_delay) * 1000, lambda: capture_image())
-        window.after(round(pre_shot_delay + pre_focus_delay) * 1000, lambda: send_command_to_arduino(f"U{angle}"))
-        window.after(round(pre_shot_delay + pre_focus_delay + rot_time) * 1000, lambda: capture_stack_step(frame_index + 1, num_frames, pre_shot_delay, pre_focus_delay, angle))
+        
+        def capture_next_image():
+            file_path = capture_image()
+            window.after(round(pre_focus_delay) * 1000, rotate_knob)
+            process_captured_image(file_path)
+
+        def rotate_knob():
+            send_command_to_arduino(f"U{angle}")
+            rot_time = 2 * angle / 360  # Time to rotate the stage by the specified angle
+            window.after(round(rot_time) * 1000, lambda: capture_stack_step(frame_index + 1, num_frames, pre_shot_delay, pre_focus_delay, angle))
+
+        window.after(round(pre_shot_delay) * 1000, capture_next_image)
 
     def capture_stack():
         nonlocal stop_capture
