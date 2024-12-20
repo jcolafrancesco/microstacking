@@ -87,6 +87,25 @@ def setup_style():
     style.configure("TLabel", background=style.lookup("TFrame", "background"))
     style.configure("Green.TButton", foreground="green")
 
+def create_label(frame, text, row, column, width=17, anchor=tk.E, pady=5, sticky=tk.W):
+    label = ttk.Label(frame, text=text, width=width, anchor=anchor)
+    label.grid(row=row, column=column, pady=pady, sticky=sticky)
+    return label
+
+def create_combobox(frame, values, row, column, width=10, default_value=None, pady=5, sticky=tk.W):
+    combobox = ttk.Combobox(frame, values=values, width=width)
+    if default_value:
+        combobox.set(default_value)
+    combobox.grid(row=row, column=column, pady=pady, sticky=sticky)
+    return combobox
+
+def create_spinbox(frame, from_, to, row, column, increment=1, width=10, default_value=None, pady=5, sticky=tk.W):
+    spinbox = ttk.Spinbox(frame, from_=from_, to=to, increment=increment, width=width)
+    if default_value:
+        spinbox.set(default_value)
+    spinbox.grid(row=row, column=column, pady=pady, sticky=sticky)
+    return spinbox
+
 def main():
     window = setup_window()
     main_frame = setup_main_frame(window)
@@ -347,136 +366,55 @@ def main():
             print(f"Failed to connect: {e}")
             status_label.config(text="Status: Unconnected", foreground="red")
 
-    def populate_iso_combobox():
+    def populate_combobox(widget_name, combobox):
         try:
-            OK, iso_widget = gp.gp_widget_get_child_by_name(config, 'iso')
+            OK, widget = gp.gp_widget_get_child_by_name(config, widget_name)
             if OK >= gp.GP_OK:
-                iso_values = [gp.gp_widget_get_choice(iso_widget, i)[1] for i in range(gp.gp_widget_count_choices(iso_widget))]
-                iso_combobox['values'] = iso_values
-                current_iso = gp.gp_widget_get_value(iso_widget)[1]
-                iso_combobox.set(current_iso)
+                values = [gp.gp_widget_get_choice(widget, i)[1] for i in range(gp.gp_widget_count_choices(widget))]
+                combobox['values'] = values
+                current_value = gp.gp_widget_get_value(widget)[1]
+                combobox.set(current_value)
         except gp.GPhoto2Error as e:
-            print(f"Failed to get ISO values: {e}")
+            print(f"Failed to get {widget_name} values: {e}")
         except Exception as e:
             print(f"Unexpected error: {e}")
 
-    def populate_shutter_speed_combobox():
+    def set_camera_value(event, widget_name, combobox):
         try:
-            OK, shutter_speed_widget = gp.gp_widget_get_child_by_name(config, 'shutterspeed')
+            OK, widget = gp.gp_widget_get_child_by_name(config, widget_name)
             if OK >= gp.GP_OK:
-                shutter_speed_values = [gp.gp_widget_get_choice(shutter_speed_widget, i)[1] for i in range(gp.gp_widget_count_choices(shutter_speed_widget))]
-                shutter_speed_combobox['values'] = shutter_speed_values
-                current_shutter_speed = gp.gp_widget_get_value(shutter_speed_widget)[1]
-                shutter_speed_combobox.set(current_shutter_speed)
-        except gp.GPhoto2Error as e:
-            print(f"Failed to get Shutter Speed values: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-    def populate_white_balance_combobox():
-        try:
-            OK, white_balance_widget = gp.gp_widget_get_child_by_name(config, 'whitebalance')
-            if OK >= gp.GP_OK:
-                white_balance_values = [gp.gp_widget_get_choice(white_balance_widget, i)[1] for i in range(gp.gp_widget_count_choices(white_balance_widget))]
-                white_balance_combobox['values'] = white_balance_values
-                current_white_balance = gp.gp_widget_get_value(white_balance_widget)[1]
-                white_balance_combobox.set(current_white_balance)
-        except gp.GPhoto2Error as e:
-            print(f"Failed to get White Balance values: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-    def populate_image_format_combobox():
-        try:
-            OK, image_format_widget = gp.gp_widget_get_child_by_name(config, 'imageformat')
-            if OK >= gp.GP_OK:
-                image_format_values = [gp.gp_widget_get_choice(image_format_widget, i)[1] for i in range(gp.gp_widget_count_choices(image_format_widget))]
-                image_format_combobox['values'] = image_format_values
-                current_image_format = gp.gp_widget_get_value(image_format_widget)[1]
-                image_format_combobox.set(current_image_format)
-        except gp.GPhoto2Error as e:
-            print(f"Failed to get Image Format values: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-    def set_iso_value(event):
-        try:
-            OK, iso_widget = gp.gp_widget_get_child_by_name(config, 'iso')
-            if OK >= gp.GP_OK:
-                print(iso_combobox.get())
-                iso_widget.set_value(iso_combobox.get())
+                widget.set_value(combobox.get())
                 camera.set_config(config)
         except gp.GPhoto2Error as e:
-            print(f"Failed to set ISO value: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-    def set_shutter_speed_value(event):
-        try:
-            OK, shutter_speed_widget = gp.gp_widget_get_child_by_name(config, 'shutterspeed')
-            if OK >= gp.GP_OK:
-                shutter_speed_widget.set_value(shutter_speed_combobox.get())
-                camera.set_config(config)
-        except gp.GPhoto2Error as e:
-            print(f"Failed to set Shutter Speed value: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-    def set_white_balance_value(event):
-        try:
-            OK, white_balance_widget = gp.gp_widget_get_child_by_name(config, 'whitebalance')
-            if OK >= gp.GP_OK:
-                white_balance_widget.set_value(white_balance_combobox.get())
-                camera.set_config(config)
-        except gp.GPhoto2Error as e:
-            print(f"Failed to set White Balance value: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-    def set_image_format_value(event):
-        try:
-            OK, image_format_widget = gp.gp_widget_get_child_by_name(config, 'imageformat')
-            if OK >= gp.GP_OK:
-                image_format_widget.set_value(image_format_combobox.get())
-                camera.set_config(config)
-        except gp.GPhoto2Error as e:
-            print(f"Failed to set Image Format value: {e}")
+            print(f"Failed to set {widget_name} value: {e}")
         except Exception as e:
             print(f"Unexpected error: {e}")
 
     # Add Shutter Speed control
-    shutter_speed_label = ttk.Label(camera_frame, text="Shutter Speed: ", width=17, anchor=tk.E)
-    shutter_speed_label.grid(row=2, column=0, pady=5, sticky=tk.W)
-    shutter_speed_combobox = ttk.Combobox(camera_frame, values=[], width=10)
-    shutter_speed_combobox.grid(row=2, column=1, pady=5, sticky=tk.W)
+    shutter_speed_label = create_label(camera_frame, "Shutter Speed: ", row=2, column=0)
+    shutter_speed_combobox = create_combobox(camera_frame, values=[], row=2, column=1)
 
     # Add ISO control
-    iso_label = ttk.Label(camera_frame, text="ISO: ", width=17, anchor=tk.E)
-    iso_label.grid(row=3, column=0, pady=5, sticky=tk.W)
-    iso_combobox = ttk.Combobox(camera_frame, values=[], width=10)
-    iso_combobox.grid(row=3, column=1, pady=5, sticky=tk.W)
+    iso_label = create_label(camera_frame, "ISO: ", row=3, column=0)
+    iso_combobox = create_combobox(camera_frame, values=[], row=3, column=1)
 
     # Add White Balance control
-    white_balance_label = ttk.Label(camera_frame, text="White Balance: ", width=17, anchor=tk.E)
-    white_balance_label.grid(row=4, column=0, pady=5, sticky=tk.W)
-    white_balance_combobox = ttk.Combobox(camera_frame, values=[], width=10)
-    white_balance_combobox.grid(row=4, column=1, pady=5, sticky=tk.W)
+    white_balance_label = create_label(camera_frame, "White Balance: ", row=4, column=0)
+    white_balance_combobox = create_combobox(camera_frame, values=[], row=4, column=1)
 
     # Add Image Format control
-    image_format_label = ttk.Label(camera_frame, text="Image Format: ", width=17, anchor=tk.E)
-    image_format_label.grid(row=5, column=0, pady=5, sticky=tk.W)
-    image_format_combobox = ttk.Combobox(camera_frame, values=[], width=10)
-    image_format_combobox.grid(row=5, column=1, pady=5, sticky=tk.W)
+    image_format_label = create_label(camera_frame, "Image Format: ", row=5, column=0)
+    image_format_combobox = create_combobox(camera_frame, values=[], row=5, column=1)
 
-    iso_combobox.bind("<<ComboboxSelected>>", set_iso_value)
-    shutter_speed_combobox.bind("<<ComboboxSelected>>", set_shutter_speed_value)
-    white_balance_combobox.bind("<<ComboboxSelected>>", set_white_balance_value)
-    image_format_combobox.bind("<<ComboboxSelected>>", set_image_format_value)
+    iso_combobox.bind("<<ComboboxSelected>>", lambda event: set_camera_value(event, 'iso', iso_combobox))
+    shutter_speed_combobox.bind("<<ComboboxSelected>>", lambda event: set_camera_value(event, 'shutterspeed', shutter_speed_combobox))
+    white_balance_combobox.bind("<<ComboboxSelected>>", lambda event: set_camera_value(event, 'whitebalance', white_balance_combobox))
+    image_format_combobox.bind("<<ComboboxSelected>>", lambda event: set_camera_value(event, 'imageformat', image_format_combobox))
 
-    populate_iso_combobox()
-    populate_shutter_speed_combobox()
-    populate_white_balance_combobox()
-    populate_image_format_combobox()
+    populate_combobox('iso', iso_combobox)
+    populate_combobox('shutterspeed', shutter_speed_combobox)
+    populate_combobox('whitebalance', white_balance_combobox)
+    populate_combobox('imageformat', image_format_combobox)
 
     capture_button = ttk.Button(camera_frame, text="Capture", command=capture_and_process_image, width=15)
     capture_button.grid(row=0, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
@@ -487,16 +425,11 @@ def main():
     update_button = ttk.Button(connection_frame, text="Update TTY", command=update_ttys)
     update_button.grid(row=0, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
 
-    tty_label = ttk.Label(connection_frame, text="Select TTY: ", width=17, anchor=tk.E)
-    tty_label.grid(row=1, column=0, pady=5, sticky=tk.W)
-    tty_combobox = ttk.Combobox(connection_frame, width=10)
-    tty_combobox.grid(row=1, column=1, pady=5, sticky=tk.W)
+    tty_label = create_label(connection_frame, "Select TTY: ", row=1, column=0)
+    tty_combobox = create_combobox(connection_frame, values=[], row=1, column=1)
 
-    baudrate_label = ttk.Label(connection_frame, text="Baudrate: ", width=17, anchor=tk.E)
-    baudrate_label.grid(row=2, column=0, pady=5, sticky=tk.W)
-    baudrate_combobox = ttk.Combobox(connection_frame, values=["9600", "19200", "38400", "57600", "115200"], width=10)
-    baudrate_combobox.set("9600")  # Default value
-    baudrate_combobox.grid(row=2, column=1, pady=5, sticky=tk.W)
+    baudrate_label = create_label(connection_frame, "Baudrate: ", row=2, column=0)
+    baudrate_combobox = create_combobox(connection_frame, ["9600", "19200", "38400", "57600", "115200"], row=2, column=1, default_value="9600")
 
     connect_button = ttk.Button(connection_frame, text="Connect", command=connect)
     connect_button.grid(row=3, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
@@ -507,11 +440,8 @@ def main():
     update_ttys()  # Update the list of TTYs at app initialization
     connect()  # Try to connect to the selected TTY after updating the list
 
-    angle_label = ttk.Label(manual_controls_frame, text="Angle (degrees): ", width=17, anchor=tk.E)
-    angle_label.grid(row=0, column=0, pady=5, sticky=tk.W)
-    angle_spinbox = ttk.Spinbox(manual_controls_frame, from_=0, to=360, increment=1, width=10)
-    angle_spinbox.set(15)  # Default value
-    angle_spinbox.grid(row=0, column=1, pady=5, sticky=tk.W)
+    angle_label = create_label(manual_controls_frame, "Angle (degrees): ", row=0, column=0)
+    angle_spinbox = create_spinbox(manual_controls_frame, from_=0, to=360, row=0, column=1, default_value=15)
 
     up_button = ttk.Button(manual_controls_frame, text="↑", command=move_up)
     up_button.grid(row=1, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
@@ -519,29 +449,17 @@ def main():
     down_button = ttk.Button(manual_controls_frame, text="↓", command=move_down)
     down_button.grid(row=2, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
 
-    frames_label = ttk.Label(stacking_frame, text="Number of Frames: ", width=17, anchor=tk.E)
-    frames_label.grid(row=0, column=0, pady=5, sticky=tk.W)
-    frames_spinbox = ttk.Spinbox(stacking_frame, from_=1, to=100, increment=1, width=10)
-    frames_spinbox.set(3)  # Default value
-    frames_spinbox.grid(row=0, column=1, pady=5, sticky=tk.W)
+    frames_label = create_label(stacking_frame, "Number of Frames: ", row=0, column=0)
+    frames_spinbox = create_spinbox(stacking_frame, from_=1, to=100, row=0, column=1, default_value=3)
 
-    pre_shot_delay_label = ttk.Label(stacking_frame, text="Pre-Shot Delay: ", width=17, anchor=tk.E)
-    pre_shot_delay_label.grid(row=1, column=0, pady=5, sticky=tk.W)
-    pre_shot_delay_spinbox = ttk.Spinbox(stacking_frame, from_=0, to=60, increment=1, width=10)
-    pre_shot_delay_spinbox.set(1)  # Default value
-    pre_shot_delay_spinbox.grid(row=1, column=1, pady=5, sticky=tk.W)
+    pre_shot_delay_label = create_label(stacking_frame, "Pre-Shot Delay: ", row=1, column=0)
+    pre_shot_delay_spinbox = create_spinbox(stacking_frame, from_=0, to=60, row=1, column=1, default_value=1)
 
-    pre_focus_delay_label = ttk.Label(stacking_frame, text="Pre-Focus Delay: ", width=17, anchor=tk.E)
-    pre_focus_delay_label.grid(row=2, column=0, pady=5, sticky=tk.W)
-    pre_focus_delay_spinbox = ttk.Spinbox(stacking_frame, from_=0, to=60, increment=1, width=10)
-    pre_focus_delay_spinbox.set(0)  # Default value
-    pre_focus_delay_spinbox.grid(row=2, column=1, pady=5, sticky=tk.W)
+    pre_focus_delay_label = create_label(stacking_frame, "Pre-Focus Delay: ", row=2, column=0)
+    pre_focus_delay_spinbox = create_spinbox(stacking_frame, from_=0, to=60, row=2, column=1, default_value=0)
 
-    angle_stacking_label = ttk.Label(stacking_frame, text="Angle (degrees): ", width=17, anchor=tk.E)
-    angle_stacking_label.grid(row=3, column=0, pady=5, sticky=tk.W)
-    angle_stacking_spinbox = ttk.Spinbox(stacking_frame, from_=0, to=360, increment=1, width=10)
-    angle_stacking_spinbox.set(30)  # Default value
-    angle_stacking_spinbox.grid(row=3, column=1, pady=5, sticky=tk.W)
+    angle_stacking_label = create_label(stacking_frame, "Angle (degrees): ", row=3, column=0)
+    angle_stacking_spinbox = create_spinbox(stacking_frame, from_=0, to=360, row=3, column=1, default_value=30)
 
     launch_button = ttk.Button(stacking_frame, text="Capture Stack", command=capture_stack, width=15)
     launch_button.grid(row=4, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
