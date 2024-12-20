@@ -18,18 +18,91 @@ gp.check_result(gp.gp_camera_init(camera))
 config = gp.check_result(gp.gp_camera_get_config(camera))
 gp.gp_camera_capture_preview(camera)
 
-def main():
+def setup_window():
     window = ThemedTk(theme="arc")
     window.title("Microfocus stacker")
     window.geometry("1600x900")  # Increased window size
+    return window
 
-    # Create a frame
+def setup_main_frame(window):
     main_frame = ttk.Frame(window, padding="20", width=300)
     main_frame.pack(side=tk.LEFT, fill=tk.Y)
+    return main_frame
 
-    # Camera section
+def setup_camera_frame(main_frame):
     camera_frame = ttk.LabelFrame(main_frame, text="Camera", padding="10")
     camera_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+    return camera_frame
+
+def setup_image_frame(window):
+    image_frame = ttk.Frame(window, padding="10", style="Black.TFrame")
+    image_frame.pack(side=tk.TOP, padx=10, pady=10, expand=True, fill=tk.BOTH)
+    return image_frame
+
+def setup_full_image_canvas(image_frame):
+    full_image_canvas = tk.Canvas(image_frame, background="black", bd=0, highlightthickness=0)
+    full_image_canvas.pack(expand=True, fill=tk.BOTH)
+    streaming_image = full_image_canvas.create_image(0, 0, anchor="center", image=None)
+    full_image_canvas.photo = None  # Keep a reference to the PhotoImage object
+    return full_image_canvas, streaming_image
+
+def setup_strip_frame(window):
+    strip_frame = ttk.Frame(window, padding="10")
+    strip_frame.pack(side=tk.BOTTOM, fill=tk.X)
+    return strip_frame
+
+def setup_treeview(strip_frame):
+    treeview = ttk.Treeview(strip_frame, columns=("Image"), show="tree", selectmode='browse')
+    treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar = ttk.Scrollbar(strip_frame, orient=tk.VERTICAL, command=treeview.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    treeview.configure(yscrollcommand=scrollbar.set)
+    treeview.image_dict = {}
+    return treeview
+
+def setup_controls(main_frame):
+    connection_frame = setup_connection_frame(main_frame)
+    manual_controls_frame = setup_manual_controls_frame(main_frame)
+    stacking_frame = setup_stacking_frame(main_frame)
+    return connection_frame, manual_controls_frame, stacking_frame
+
+def setup_connection_frame(main_frame):
+    connection_frame = ttk.LabelFrame(main_frame, text="Connection", padding="10")
+    connection_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+    return connection_frame
+
+def setup_manual_controls_frame(main_frame):
+    manual_controls_frame = ttk.LabelFrame(main_frame, text="Manual Controls", padding="10")
+    manual_controls_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+    return manual_controls_frame
+
+def setup_stacking_frame(main_frame):
+    stacking_frame = ttk.LabelFrame(main_frame, text="Stacking", padding="10")
+    stacking_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+    return stacking_frame
+
+def setup_style():
+    style = ttk.Style()
+    style.configure("Black.TFrame", background="black")
+    style.configure("TLabel", background=style.lookup("TFrame", "background"))
+    style.configure("Green.TButton", foreground="green")
+
+def main():
+    window = setup_window()
+    main_frame = setup_main_frame(window)
+    camera_frame = setup_camera_frame(main_frame)
+    image_frame = setup_image_frame(window)
+    full_image_canvas, streaming_image = setup_full_image_canvas(image_frame)
+    strip_frame = setup_strip_frame(window)
+    treeview = setup_treeview(strip_frame)
+    connection_frame, manual_controls_frame, stacking_frame = setup_controls(main_frame)
+    setup_style()
+
+    current_image_path = None
+    last_selected_image_path = None
+    resize_timer = None
+    stack_folder = None
+    stop_capture = False  # Initialize stop_capture
 
     def toggle_camera_preview():
         global camera_preview_active
@@ -80,7 +153,6 @@ def main():
     def add_image_to_treeview(image_path):
         image = Image.open(image_path)
         image.thumbnail((100, 100))
-        photo = ImageTk.PhotoImage(image)
         parent_folder = os.path.basename(os.path.dirname(image_path))
         if parent_folder == "Capture":
             parent_folder = os.path.basename(os.path.dirname(os.path.dirname(image_path)))
@@ -90,7 +162,6 @@ def main():
         else:
             parent_id = treeview.image_dict[parent_folder]
         new_item = treeview.insert(parent_id, 'end', text=image_path)
-        treeview.image_dict[image_path] = photo
         treeview.selection_set(new_item)
         treeview.see(new_item)
 
@@ -102,35 +173,179 @@ def main():
                     treeview.see(item)
                     break
 
-    capture_button = ttk.Button(camera_frame, text="Capture", command=capture_and_process_image, width=15)
-    capture_button.grid(row=0, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
+    def show_full_image(image_path):
+        nonlocal current_image_path, last_selected_image_path
+        if not camera_preview_active and os.path.isfile(image_path):
+            current_image_path = image_path
+            last_selected_image_path = image_path
+            image = Image.open(image_path)
+            resize_and_display_image(image)
 
-    camera_button = ttk.Button(camera_frame, text="Start Preview", command=toggle_camera_preview, width=15)
-    camera_button.grid(row=1, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
+    def resize_and_display_image(image):
+        # Calculate the new size while maintaining the aspect ratio
+        frame_width = image_frame.winfo_width()
+        frame_height = image_frame.winfo_height()
 
-    # Add Shutter Speed control
-    shutter_speed_label = ttk.Label(camera_frame, text="Shutter Speed: ", width=17, anchor=tk.E)
-    shutter_speed_label.grid(row=2, column=0, pady=5, sticky=tk.W)
-    shutter_speed_combobox = ttk.Combobox(camera_frame, values=[], width=10)
-    shutter_speed_combobox.grid(row=2, column=1, pady=5, sticky=tk.W)
+        if frame_width > 0 and frame_height > 0:
+            image_ratio = image.width / image.height
+            frame_ratio = frame_width / frame_height
 
-    # Add ISO control
-    iso_label = ttk.Label(camera_frame, text="ISO: ", width=17, anchor=tk.E)
-    iso_label.grid(row=3, column=0, pady=5, sticky=tk.W)
-    iso_combobox = ttk.Combobox(camera_frame, values=[], width=10)
-    iso_combobox.grid(row=3, column=1, pady=5, sticky=tk.W)
+            if frame_ratio > image_ratio:
+                new_height = frame_height
+                new_width = int(new_height * image_ratio)
+            else:
+                new_width = frame_width
+                new_height = int(new_width / image_ratio)
 
-    # Add White Balance control
-    white_balance_label = ttk.Label(camera_frame, text="White Balance: ", width=17, anchor=tk.E)
-    white_balance_label.grid(row=4, column=0, pady=5, sticky=tk.W)
-    white_balance_combobox = ttk.Combobox(camera_frame, values=[], width=10)
-    white_balance_combobox.grid(row=4, column=1, pady=5, sticky=tk.W)
+            if new_width > 0 and new_height > 0:
+                resized_image = image.resize((new_width, new_height), Image.LANCZOS)
+                photo = ImageTk.PhotoImage(resized_image)
+                full_image_canvas.itemconfig(streaming_image, image=photo)
+                full_image_canvas.coords(streaming_image, frame_width // 2, frame_height // 2)  # Center the image
+                full_image_canvas.photo = photo  # Keep a reference to the PhotoImage object
 
-    # Add Image Format control
-    image_format_label = ttk.Label(camera_frame, text="Image Format: ", width=17, anchor=tk.E)
-    image_format_label.grid(row=5, column=0, pady=5, sticky=tk.W)
-    image_format_combobox = ttk.Combobox(camera_frame, values=[], width=10)
-    image_format_combobox.grid(row=5, column=1, pady=5, sticky=tk.W)
+    def schedule_final_resize():
+        nonlocal resize_timer
+        resize_timer = None
+        if camera_preview_active:
+            update_camera_preview()
+        elif current_image_path:
+            image = Image.open(current_image_path)
+            resize_and_display_image(image)
+
+    def update_camera_preview():
+        if camera_preview_active:
+            try:
+                camera_file = gp.check_result(gp.gp_camera_capture_preview(camera))
+                file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
+                image = Image.open(io.BytesIO(file_data))
+                resize_and_display_image(image)
+            except gp.GPhoto2Error as e:
+                if e.code == gp.GP_ERROR_IO:
+                    print(f"Failed to capture preview: {e}")
+                    window.after(200, update_camera_preview)  # Wait a bit before retrying
+                else:
+                    print(f"Failed to capture preview: {e}")
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+            window.after(round(1000/30), update_camera_preview)  # Increase interval to 200ms
+        else:
+            if last_selected_image_path:
+                show_full_image(last_selected_image_path)
+
+    def capture_stack_step(frame_index, num_frames, pre_shot_delay, pre_focus_delay, angle):
+        if stop_capture or frame_index >= num_frames:
+            send_command_to_arduino("R")
+            launch_button.config(style="TButton")
+            return
+        
+        def capture_next_image():
+            file_path = capture_image()
+            window.after(round(pre_focus_delay) * 1000, rotate_knob)
+            process_captured_image(file_path, stack_folder)
+
+        def rotate_knob():
+            send_command_to_arduino(f"U{angle}")
+            rot_time = 2 * angle / 360  # Time to rotate the stage by the specified angle
+            window.after(round(rot_time) * 1000, lambda: capture_stack_step(frame_index + 1, num_frames, pre_shot_delay, pre_focus_delay, angle))
+
+        window.after(round(pre_shot_delay) * 1000, capture_next_image)
+
+    def capture_stack():
+        nonlocal stop_capture, stack_folder
+        stop_capture = False
+        num_frames = int(frames_spinbox.get())
+        pre_shot_delay = int(pre_shot_delay_spinbox.get())
+        pre_focus_delay = int(pre_focus_delay_spinbox.get())
+        angle = int(angle_stacking_spinbox.get())
+        stack_folder = f"Stack_{time.strftime('%Y%m%d_%H%M%S')}"
+        os.makedirs(stack_folder, exist_ok=True)
+        send_command_to_arduino("A")
+        launch_button.config(style="Green.TButton")
+        capture_stack_step(0, num_frames, pre_shot_delay, pre_focus_delay, angle)
+
+    def stop_capture_stack():
+        nonlocal stop_capture
+        stop_capture = True
+
+    def on_treeview_select(event):
+        selected_item = treeview.selection()[0]
+        image_path = treeview.item(selected_item, "text")
+        show_full_image(image_path)
+
+    def load_images_from_folder(folder):
+        singles_id = None
+        folder_dict = {}
+        for root, _, files in os.walk(folder):
+            parent_folder = os.path.basename(root)
+            if parent_folder == "Capture":
+                parent_folder = os.path.basename(os.path.dirname(root))
+            if parent_folder not in folder_dict:
+                folder_dict[parent_folder] = []
+            for file in files:
+                if os.path.isfile(os.path.join(root, file)) and file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.cr2')):
+                    image_path = os.path.join(root, file)
+                    folder_dict[parent_folder].append(image_path)
+        for parent_folder in sorted(folder_dict.keys()):
+            parent_id = treeview.insert('', 'end', text=parent_folder, open=(parent_folder == "Singles"))
+            treeview.image_dict[parent_folder] = parent_id
+            if parent_folder == "Singles":
+                singles_id = parent_id
+            for image_path in folder_dict[parent_folder]:
+                treeview.insert(parent_id, 'end', text=image_path)
+        return singles_id
+
+    def display_first_image():
+        if singles_id and treeview.get_children(singles_id):
+            first_image_path = treeview.item(treeview.get_children(singles_id)[0], "text")
+            show_full_image(first_image_path)
+            treeview.selection_set(treeview.get_children(singles_id)[0])
+            treeview.see(treeview.get_children(singles_id)[0])
+        elif treeview.get_children():
+            first_image_path = treeview.item(treeview.get_children()[0], "text")
+            show_full_image(first_image_path)
+            select_image_in_treeview(first_image_path)
+
+    def on_resize(event):
+        nonlocal resize_timer
+        if resize_timer is not None:
+            window.after_cancel(resize_timer)
+        
+        resize_timer = window.after(50, schedule_final_resize)
+
+    def send_command_to_arduino(command):
+        global arduino
+        if arduino:
+            arduino.write(command.encode())
+        else:
+            print("Arduino not connected")
+
+    def move_up():
+        send_command_to_arduino("A")
+        send_command_to_arduino(f"U{angle_spinbox.get()}")
+        send_command_to_arduino("R")
+
+    def move_down():
+        send_command_to_arduino("A")
+        send_command_to_arduino(f"D{angle_spinbox.get()}")
+        send_command_to_arduino("R")
+
+    def update_ttys():
+        ttys = [f"/dev/{tty}" for tty in os.listdir('/dev') if tty.startswith('tty')]
+        tty_combobox['values'] = ttys
+        if ttys:
+            tty_combobox.set(ttys[-1])  # Set to the last tty in the list
+
+    def connect():
+        global arduino
+        tty = tty_combobox.get()
+        baudrate = baudrate_combobox.get()
+        try:
+            arduino = serial.Serial(tty, baudrate)
+            status_label.config(text="Status: Connected", foreground="green")
+        except Exception as e:
+            print(f"Failed to connect: {e}")
+            status_label.config(text="Status: Unconnected", foreground="red")
 
     def populate_iso_combobox():
         try:
@@ -229,6 +444,30 @@ def main():
         except Exception as e:
             print(f"Unexpected error: {e}")
 
+    # Add Shutter Speed control
+    shutter_speed_label = ttk.Label(camera_frame, text="Shutter Speed: ", width=17, anchor=tk.E)
+    shutter_speed_label.grid(row=2, column=0, pady=5, sticky=tk.W)
+    shutter_speed_combobox = ttk.Combobox(camera_frame, values=[], width=10)
+    shutter_speed_combobox.grid(row=2, column=1, pady=5, sticky=tk.W)
+
+    # Add ISO control
+    iso_label = ttk.Label(camera_frame, text="ISO: ", width=17, anchor=tk.E)
+    iso_label.grid(row=3, column=0, pady=5, sticky=tk.W)
+    iso_combobox = ttk.Combobox(camera_frame, values=[], width=10)
+    iso_combobox.grid(row=3, column=1, pady=5, sticky=tk.W)
+
+    # Add White Balance control
+    white_balance_label = ttk.Label(camera_frame, text="White Balance: ", width=17, anchor=tk.E)
+    white_balance_label.grid(row=4, column=0, pady=5, sticky=tk.W)
+    white_balance_combobox = ttk.Combobox(camera_frame, values=[], width=10)
+    white_balance_combobox.grid(row=4, column=1, pady=5, sticky=tk.W)
+
+    # Add Image Format control
+    image_format_label = ttk.Label(camera_frame, text="Image Format: ", width=17, anchor=tk.E)
+    image_format_label.grid(row=5, column=0, pady=5, sticky=tk.W)
+    image_format_combobox = ttk.Combobox(camera_frame, values=[], width=10)
+    image_format_combobox.grid(row=5, column=1, pady=5, sticky=tk.W)
+
     iso_combobox.bind("<<ComboboxSelected>>", set_iso_value)
     shutter_speed_combobox.bind("<<ComboboxSelected>>", set_shutter_speed_value)
     white_balance_combobox.bind("<<ComboboxSelected>>", set_white_balance_value)
@@ -239,40 +478,24 @@ def main():
     populate_white_balance_combobox()
     populate_image_format_combobox()
 
-    # Connection section
-    connection_frame = ttk.LabelFrame(main_frame, text="Connection", padding="10")
-    connection_frame.pack(pady=10, fill=tk.BOTH, expand=True)
+    capture_button = ttk.Button(camera_frame, text="Capture", command=capture_and_process_image, width=15)
+    capture_button.grid(row=0, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
 
-    tty_combobox = ttk.Combobox(connection_frame, width=10)
-    baudrate_combobox = ttk.Combobox(connection_frame, values=["9600", "19200", "38400", "57600", "115200"], width=10)
-    baudrate_combobox.set("9600")  # Default value
-
-    def update_ttys():
-        ttys = [f"/dev/{tty}" for tty in os.listdir('/dev') if tty.startswith('tty')]
-        tty_combobox['values'] = ttys
-        if ttys:
-            tty_combobox.set(ttys[-1])  # Set to the last tty in the list
-
-    def connect():
-        global arduino
-        tty = tty_combobox.get()
-        baudrate = baudrate_combobox.get()
-        try:
-            arduino = serial.Serial(tty, baudrate)
-            status_label.config(text="Status: Connected", foreground="green")
-        except Exception as e:
-            print(f"Failed to connect: {e}")
-            status_label.config(text="Status: Unconnected", foreground="red")
+    camera_button = ttk.Button(camera_frame, text="Start Preview", command=toggle_camera_preview, width=15)
+    camera_button.grid(row=1, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
 
     update_button = ttk.Button(connection_frame, text="Update TTY", command=update_ttys)
     update_button.grid(row=0, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
 
     tty_label = ttk.Label(connection_frame, text="Select TTY: ", width=17, anchor=tk.E)
     tty_label.grid(row=1, column=0, pady=5, sticky=tk.W)
+    tty_combobox = ttk.Combobox(connection_frame, width=10)
     tty_combobox.grid(row=1, column=1, pady=5, sticky=tk.W)
 
     baudrate_label = ttk.Label(connection_frame, text="Baudrate: ", width=17, anchor=tk.E)
     baudrate_label.grid(row=2, column=0, pady=5, sticky=tk.W)
+    baudrate_combobox = ttk.Combobox(connection_frame, values=["9600", "19200", "38400", "57600", "115200"], width=10)
+    baudrate_combobox.set("9600")  # Default value
     baudrate_combobox.grid(row=2, column=1, pady=5, sticky=tk.W)
 
     connect_button = ttk.Button(connection_frame, text="Connect", command=connect)
@@ -284,42 +507,17 @@ def main():
     update_ttys()  # Update the list of TTYs at app initialization
     connect()  # Try to connect to the selected TTY after updating the list
 
-    # Manual Controls section
-    manual_controls_frame = ttk.LabelFrame(main_frame, text="Manual Controls", padding="10")
-    manual_controls_frame.pack(pady=10, fill=tk.BOTH, expand=True)
-
     angle_label = ttk.Label(manual_controls_frame, text="Angle (degrees): ", width=17, anchor=tk.E)
     angle_label.grid(row=0, column=0, pady=5, sticky=tk.W)
     angle_spinbox = ttk.Spinbox(manual_controls_frame, from_=0, to=360, increment=1, width=10)
     angle_spinbox.set(15)  # Default value
     angle_spinbox.grid(row=0, column=1, pady=5, sticky=tk.W)
 
-    def send_command_to_arduino(command):
-        global arduino
-        if arduino:
-            arduino.write(command.encode())
-        else:
-            print("Arduino not connected")
-
-    def move_up():
-        send_command_to_arduino("A")
-        send_command_to_arduino(f"U{angle_spinbox.get()}")
-        send_command_to_arduino("R")
-
-    def move_down():
-        send_command_to_arduino("A")
-        send_command_to_arduino(f"D{angle_spinbox.get()}")
-        send_command_to_arduino("R")
-
     up_button = ttk.Button(manual_controls_frame, text="↑", command=move_up)
     up_button.grid(row=1, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
 
     down_button = ttk.Button(manual_controls_frame, text="↓", command=move_down)
     down_button.grid(row=2, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
-
-    # Stacking section
-    stacking_frame = ttk.LabelFrame(main_frame, text="Stacking", padding="10")
-    stacking_frame.pack(pady=10, fill=tk.BOTH, expand=True)
 
     frames_label = ttk.Label(stacking_frame, text="Number of Frames: ", width=17, anchor=tk.E)
     frames_label.grid(row=0, column=0, pady=5, sticky=tk.W)
@@ -345,197 +543,22 @@ def main():
     angle_stacking_spinbox.set(30)  # Default value
     angle_stacking_spinbox.grid(row=3, column=1, pady=5, sticky=tk.W)
 
-    stop_capture = False
-    stack_folder = None
-
-    def capture_stack_step(frame_index, num_frames, pre_shot_delay, pre_focus_delay, angle):
-        if stop_capture or frame_index >= num_frames:
-            send_command_to_arduino("R")
-            launch_button.config(style="TButton")
-            return
-        
-        def capture_next_image():
-            file_path = capture_image()
-            window.after(round(pre_focus_delay) * 1000, rotate_knob)
-            process_captured_image(file_path, stack_folder)
-
-        def rotate_knob():
-            send_command_to_arduino(f"U{angle}")
-            rot_time = 2 * angle / 360  # Time to rotate the stage by the specified angle
-            window.after(round(rot_time) * 1000, lambda: capture_stack_step(frame_index + 1, num_frames, pre_shot_delay, pre_focus_delay, angle))
-
-        window.after(round(pre_shot_delay) * 1000, capture_next_image)
-
-    def capture_stack():
-        nonlocal stop_capture, stack_folder
-        stop_capture = False
-        num_frames = int(frames_spinbox.get())
-        pre_shot_delay = int(pre_shot_delay_spinbox.get())
-        pre_focus_delay = int(pre_focus_delay_spinbox.get())
-        angle = int(angle_stacking_spinbox.get())
-        stack_folder = f"Stack_{time.strftime('%Y%m%d_%H%M%S')}"
-        os.makedirs(stack_folder, exist_ok=True)
-        send_command_to_arduino("A")
-        launch_button.config(style="Green.TButton")
-        capture_stack_step(0, num_frames, pre_shot_delay, pre_focus_delay, angle)
-
-    def stop_capture_stack():
-        nonlocal stop_capture
-        stop_capture = True
-
     launch_button = ttk.Button(stacking_frame, text="Capture Stack", command=capture_stack, width=15)
     launch_button.grid(row=4, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
 
     stop_button = ttk.Button(stacking_frame, text="Stop", command=stop_capture_stack, width=15)
     stop_button.grid(row=5, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
 
-    # Create a frame for the image strip
-    strip_frame = ttk.Frame(window, padding="10")
-    strip_frame.pack(side=tk.BOTTOM, fill=tk.X)
-
-    treeview = ttk.Treeview(strip_frame, columns=("Image"), show="tree", selectmode='browse')
-    treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-    scrollbar = ttk.Scrollbar(strip_frame, orient=tk.VERTICAL, command=treeview.yview)
-    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-    treeview.configure(yscrollcommand=scrollbar.set)
-    treeview.image_dict = {}
-
-    def on_treeview_select(event):
-        selected_item = treeview.selection()[0]
-        image_path = treeview.item(selected_item, "text")
-        show_full_image(image_path)
-
     treeview.bind("<<TreeviewSelect>>", on_treeview_select)
 
-    # Create a frame for displaying the full image
-    image_frame = ttk.Frame(window, padding="10", style="Black.TFrame")
-    image_frame.pack(side=tk.RIGHT, padx=10, pady=10, expand=True, fill=tk.BOTH)
-
-    # Create a canvas for displaying the full image
-    full_image_canvas = tk.Canvas(image_frame, background="black", bd=0, highlightthickness=0)
-    full_image_canvas.pack(expand=True, fill=tk.BOTH)
-    streaming_image = full_image_canvas.create_image(0, 0, anchor="center", image=None)
-    full_image_canvas.photo = None  # Keep a reference to the PhotoImage object
-
-    current_image_path = None
-    last_selected_image_path = None
-    resize_timer = None
-
-    def show_full_image(image_path):
-        nonlocal current_image_path, last_selected_image_path
-        if not camera_preview_active and os.path.isfile(image_path):
-            current_image_path = image_path
-            last_selected_image_path = image_path
-            image = Image.open(image_path)
-            resize_and_display_image(image)
-
-    def resize_and_display_image(image):
-        # Calculate the new size while maintaining the aspect ratio
-        frame_width = image_frame.winfo_width()
-        frame_height = image_frame.winfo_height()
-
-        if frame_width > 0 and frame_height > 0:
-            image_ratio = image.width / image.height
-            frame_ratio = frame_width / frame_height
-
-            if frame_ratio > image_ratio:
-                new_height = frame_height
-                new_width = int(new_height * image_ratio)
-            else:
-                new_width = frame_width
-                new_height = int(new_width / image_ratio)
-
-            if new_width > 0 and new_height > 0:
-                resized_image = image.resize((new_width, new_height), Image.LANCZOS)
-                photo = ImageTk.PhotoImage(resized_image)
-                full_image_canvas.itemconfig(streaming_image, image=photo)
-                full_image_canvas.coords(streaming_image, frame_width // 2, frame_height // 2)  # Center the image
-                full_image_canvas.photo = photo  # Keep a reference to the PhotoImage object
-
-    def schedule_final_resize():
-        nonlocal resize_timer
-        resize_timer = None
-        if camera_preview_active:
-            update_camera_preview()
-        elif current_image_path:
-            image = Image.open(current_image_path)
-            resize_and_display_image(image)
-
-    def update_camera_preview():
-        if camera_preview_active:
-            try:
-                camera_file = gp.check_result(gp.gp_camera_capture_preview(camera))
-                file_data = gp.check_result(gp.gp_file_get_data_and_size(camera_file))
-                image = Image.open(io.BytesIO(file_data))
-                resize_and_display_image(image)
-            except gp.GPhoto2Error as e:
-                if e.code == gp.GP_ERROR_IO:
-                    print(f"Failed to capture preview: {e}")
-                    window.after(200, update_camera_preview)  # Wait a bit before retrying
-                else:
-                    print(f"Failed to capture preview: {e}")
-            except Exception as e:
-                print(f"Unexpected error: {e}")
-            window.after(round(1000/30), update_camera_preview)  # Increase interval to 200ms
-        else:
-            if last_selected_image_path:
-                show_full_image(last_selected_image_path)
-
-    # Load and display images from the specified folder
-    image_folder = "Capture"
-    def load_images_from_folder(folder):
-        singles_id = None
-        folder_dict = {}
-        for root, _, files in os.walk(folder):
-            parent_folder = os.path.basename(root)
-            if parent_folder == "Capture":
-                parent_folder = os.path.basename(os.path.dirname(root))
-            if parent_folder not in folder_dict:
-                folder_dict[parent_folder] = []
-            for file in files:
-                if os.path.isfile(os.path.join(root, file)) and file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.cr2')):
-                    image_path = os.path.join(root, file)
-                    folder_dict[parent_folder].append(image_path)
-        for parent_folder in sorted(folder_dict.keys()):
-            parent_id = treeview.insert('', 'end', text=parent_folder, open=(parent_folder == "Singles"))
-            treeview.image_dict[parent_folder] = parent_id
-            if parent_folder == "Singles":
-                singles_id = parent_id
-            for image_path in folder_dict[parent_folder]:
-                treeview.insert(parent_id, 'end', text=image_path)
-                treeview.image_dict[image_path] = ImageTk.PhotoImage(Image.open(image_path))
-        return singles_id
-
-    singles_id = load_images_from_folder(image_folder)
-
-    def display_first_image():
-        if singles_id and treeview.get_children(singles_id):
-            first_image_path = treeview.item(treeview.get_children(singles_id)[0], "text")
-            show_full_image(first_image_path)
-            treeview.selection_set(treeview.get_children(singles_id)[0])
-            treeview.see(treeview.get_children(singles_id)[0])
-        elif treeview.get_children():
-            first_image_path = treeview.item(treeview.get_children()[0], "text")
-            show_full_image(first_image_path)
-            select_image_in_treeview(first_image_path)
+    start_time = time.time()
+    singles_id = load_images_from_folder("Capture")
+    end_time = time.time()
+    print(f"Time taken to load images: {end_time - start_time} seconds")
 
     window.after(100, display_first_image)  # Display the first image after the window is initialized
 
-    def on_resize(event):
-        nonlocal resize_timer
-        if resize_timer is not None:
-            window.after_cancel(resize_timer)
-        
-        resize_timer = window.after(50, schedule_final_resize)
-
     window.bind("<Configure>", on_resize)  # Bind the resize event to update the image size
-
-    style = ttk.Style()
-    style.configure("Black.TFrame", background="black")
-    style.configure("TLabel", background=style.lookup("TFrame", "background"))
-    style.configure("Green.TButton", foreground="green")
 
     window.mainloop()
 
