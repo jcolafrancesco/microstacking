@@ -25,6 +25,7 @@ import gphoto2 as gp
 import subprocess
 import io
 import time
+import threading
 
 arduino = None  # Variable to store the serial connection
 camera_preview_active = False  # Variable to track camera preview state
@@ -74,16 +75,20 @@ def setup_full_image_canvas(image_frame):
 
 def setup_strip_frame(window):
     strip_frame = ttk.Frame(window, padding="10")
-    strip_frame.pack(side=tk.BOTTOM, fill=tk.X)
+    strip_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 10))  # Add padding to reduce height
     return strip_frame
 
 def setup_treeview(strip_frame):
-    treeview = ttk.Treeview(strip_frame, columns=("Image"), show="tree", selectmode='browse')
+    style = ttk.Style()
+    style.configure("Treeview", rowheight=40)  # Reduce row height to save space
+
+    treeview = ttk.Treeview(strip_frame, columns=("Image"), show="tree", selectmode='browse', style="Treeview")
     treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar = ttk.Scrollbar(strip_frame, orient=tk.VERTICAL, command=treeview.yview)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
     treeview.configure(yscrollcommand=scrollbar.set)
     treeview.image_dict = {}
+    treeview.image_thumbnails = {}  # Dictionary to store image thumbnails
     return treeview
 
 def setup_controls(main_frame):
@@ -197,7 +202,8 @@ def main():
 
     def add_image_to_treeview(image_path):
         image = Image.open(image_path)
-        image.thumbnail((100, 100))
+        image.thumbnail((50, 50))  # Adjust thumbnail size to fit within the tree view
+        photo = ImageTk.PhotoImage(image)
         parent_folder = os.path.basename(os.path.dirname(image_path))
         if parent_folder == "Capture":
             parent_folder = os.path.basename(os.path.dirname(os.path.dirname(image_path)))
@@ -207,7 +213,8 @@ def main():
         else:
             parent_id = treeview.image_dict[parent_folder]
         image_name = os.path.basename(image_path)
-        new_item = treeview.insert(parent_id, 'end', text=image_name)
+        new_item = treeview.insert(parent_id, 'end', text=image_name, image=photo)
+        treeview.image_thumbnails[new_item] = photo  # Keep a reference to the PhotoImage object
         treeview.selection_set(new_item)
         treeview.see(new_item)
 
@@ -344,8 +351,21 @@ def main():
                     singles_id = parent_id
                 for image_path in sorted(folder_dict[parent_folder]):
                     image_name = os.path.basename(image_path)
-                    treeview.insert(parent_id, 'end', text=image_name)
+                    new_item = treeview.insert(parent_id, 'end', text=image_name)
+                    treeview.image_thumbnails[new_item] = image_path  # Store the image path temporarily
         return singles_id
+
+    def load_thumbnails():
+        for item in treeview.image_thumbnails:
+            image_path = treeview.image_thumbnails[item]
+            image = Image.open(image_path)
+            image.thumbnail((50, 50))  # Adjust thumbnail size to fit within the tree view
+            photo = ImageTk.PhotoImage(image)
+            treeview.item(item, image=photo)
+            treeview.image_thumbnails[item] = photo  # Replace the path with the PhotoImage object
+
+    def load_images_thread():
+        load_thumbnails()
 
     def display_first_image():
         if singles_id and treeview.get_children(singles_id):
@@ -359,6 +379,7 @@ def main():
             select_image_in_treeview(first_image_path)
 
     def on_resize(event):
+        strip_frame.config(height=int(40*7))
         nonlocal resize_timer
         if resize_timer is not None:
             window.after_cancel(resize_timer)
@@ -506,12 +527,9 @@ def main():
 
     treeview.bind("<<TreeviewSelect>>", on_treeview_select)
 
-    start_time = time.time()
-    singles_id = load_images_from_folder("Capture")
-    end_time = time.time()
-    print(f"Time taken to load images: {end_time - start_time} seconds")
-
-    window.after(100, display_first_image)  # Display the first image after the window is initialized
+    singles_id = load_images_from_folder("Capture")  # Load image names in the main thread
+    display_first_image()
+    threading.Thread(target=load_images_thread).start()  # Load thumbnails in a separate thread
 
     window.bind("<Configure>", on_resize)  # Bind the resize event to update the image size
 
