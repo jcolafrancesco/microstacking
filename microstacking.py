@@ -30,10 +30,19 @@ arduino = None  # Variable to store the serial connection
 camera_preview_active = False  # Variable to track camera preview state
 subprocess.call(["gio", "mount", "-s", "gphoto2"])
 subprocess.call(["mkdir", "-p", "Capture"])
-camera = gp.check_result(gp.gp_camera_new())
-gp.check_result(gp.gp_camera_init(camera))
-config = gp.check_result(gp.gp_camera_get_config(camera))
-gp.gp_camera_capture_preview(camera)
+
+camera_connected = False  # Variable to track camera connection state
+
+try:
+    camera = gp.check_result(gp.gp_camera_new())
+    gp.check_result(gp.gp_camera_init(camera))
+    config = gp.check_result(gp.gp_camera_get_config(camera))
+    gp.gp_camera_capture_preview(camera)
+    camera_connected = True
+except gp.GPhoto2Error as e:
+    print(f"Failed to initialize camera: {e}")
+except Exception as e:
+    print(f"Unexpected error: {e}")
 
 def setup_window():
     window = ThemedTk(theme="arc")
@@ -379,6 +388,8 @@ def main():
         try:
             arduino = serial.Serial(tty, baudrate)
             status_label.config(text="Status: Connected", foreground="green")
+            up_button.config(state=tk.NORMAL)
+            down_button.config(state=tk.NORMAL)
         except Exception as e:
             print(f"Failed to connect: {e}")
             status_label.config(text="Status: Unconnected", foreground="red")
@@ -462,9 +473,11 @@ def main():
 
     up_button = ttk.Button(manual_controls_frame, text="↑", command=move_up)
     up_button.grid(row=1, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
+    up_button.config(state=tk.DISABLED)
 
     down_button = ttk.Button(manual_controls_frame, text="↓", command=move_down)
     down_button.grid(row=2, column=0, columnspan=2, pady=5, sticky=tk.W+tk.E)
+    down_button.config(state=tk.DISABLED)
 
     frames_label = create_label(stacking_frame, "Number of Frames: ", row=0, column=0)
     frames_spinbox = create_spinbox(stacking_frame, from_=1, to=100, row=0, column=1, default_value=3)
@@ -494,6 +507,17 @@ def main():
     window.after(100, display_first_image)  # Display the first image after the window is initialized
 
     window.bind("<Configure>", on_resize)  # Bind the resize event to update the image size
+
+    if not camera_connected:
+        camera_button.config(state=tk.DISABLED)
+        capture_button.config(state=tk.DISABLED)
+        shutter_speed_combobox.config(state=tk.DISABLED)
+        iso_combobox.config(state=tk.DISABLED)
+        white_balance_combobox.config(state=tk.DISABLED)
+        image_format_combobox.config(state=tk.DISABLED)
+        launch_button.config(state=tk.DISABLED)
+        stop_button.config(state=tk.DISABLED)
+        print("Camera controls disabled due to no camera connection")
 
     window.mainloop()
 
