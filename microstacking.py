@@ -206,17 +206,19 @@ def main():
             treeview.image_dict[parent_folder] = parent_id
         else:
             parent_id = treeview.image_dict[parent_folder]
-        new_item = treeview.insert(parent_id, 'end', text=image_path)
+        image_name = os.path.basename(image_path)
+        new_item = treeview.insert(parent_id, 'end', text=image_name)
         treeview.selection_set(new_item)
         treeview.see(new_item)
 
     def select_image_in_treeview(image_path):
         if os.path.isfile(image_path):
             for item in treeview.get_children():
-                if treeview.item(item, "text") == image_path:
-                    treeview.selection_set(item)
-                    treeview.see(item)
-                    break
+                for sub_item in treeview.get_children(item):
+                    if treeview.item(sub_item, "text") == os.path.basename(image_path):
+                        treeview.selection_set(sub_item)
+                        treeview.see(sub_item)
+                        break
 
     def show_full_image(image_path):
         nonlocal current_image_path, last_selected_image_path
@@ -315,7 +317,10 @@ def main():
 
     def on_treeview_select(event):
         selected_item = treeview.selection()[0]
-        image_path = treeview.item(selected_item, "text")
+        parent_item = treeview.parent(selected_item)
+        parent_folder = treeview.item(parent_item, "text")
+        image_name = treeview.item(selected_item, "text")
+        image_path = os.path.join("Capture", parent_folder, image_name)
         show_full_image(image_path)
 
     def load_images_from_folder(folder):
@@ -332,12 +337,14 @@ def main():
                     image_path = os.path.join(root, file)
                     folder_dict[parent_folder].append(image_path)
         for parent_folder in sorted(folder_dict.keys()):
-            parent_id = treeview.insert('', 'end', text=parent_folder, open=(parent_folder == "Singles"))
-            treeview.image_dict[parent_folder] = parent_id
-            if parent_folder == "Singles":
-                singles_id = parent_id
-            for image_path in folder_dict[parent_folder]:
-                treeview.insert(parent_id, 'end', text=image_path)
+            if parent_folder:  # Ensure parent_folder is not empty
+                parent_id = treeview.insert('', 'end', text=parent_folder, open=(parent_folder == "Singles"))
+                treeview.image_dict[parent_folder] = parent_id
+                if parent_folder == "Singles":
+                    singles_id = parent_id
+                for image_path in sorted(folder_dict[parent_folder]):
+                    image_name = os.path.basename(image_path)
+                    treeview.insert(parent_id, 'end', text=image_name)
         return singles_id
 
     def display_first_image():
