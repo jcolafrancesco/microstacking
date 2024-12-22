@@ -63,7 +63,7 @@ def setup_camera_frame(main_frame):
 
 def setup_image_frame(window):
     image_frame = ttk.Frame(window, padding="10", style="Black.TFrame")
-    image_frame.pack(side=tk.TOP, padx=10, pady=10, expand=True, fill=tk.BOTH)
+    image_frame.pack(side=tk.RIGHT, padx=10, pady=10, expand=True, fill=tk.BOTH)
     return image_frame
 
 def setup_full_image_canvas(image_frame):
@@ -75,7 +75,7 @@ def setup_full_image_canvas(image_frame):
 
 def setup_strip_frame(window):
     strip_frame = ttk.Frame(window, padding="10")
-    strip_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(0, 10))  # Add padding to reduce height
+    strip_frame.pack(fill=tk.Y, expand=True, pady=(0, 10))  # Add padding to reduce height
     return strip_frame
 
 def setup_treeview(strip_frame):
@@ -252,8 +252,8 @@ def main():
                 new_height = int(new_width / image_ratio)
 
             if new_width > 0 and new_height > 0:
-                image.thumbnail((new_width, new_height), Image.NEAREST)  # Use thumbnail instead of resize
-                photo = ImageTk.PhotoImage(image)
+                resized_image = image.resize((new_width, new_height), Image.NEAREST)  # Use resize instead of thumbnail
+                photo = ImageTk.PhotoImage(resized_image)
                 full_image_canvas.itemconfig(streaming_image, image=photo)
                 full_image_canvas.coords(streaming_image, frame_width // 2, frame_height // 2)  # Center the image
                 full_image_canvas.photo = photo  # Keep a reference to the PhotoImage object
@@ -261,9 +261,7 @@ def main():
     def schedule_final_resize():
         nonlocal resize_timer
         resize_timer = None
-        if camera_preview_active:
-            update_camera_preview()
-        elif current_image_path:
+        if not camera_preview_active and current_image_path:
             image = Image.open(current_image_path)
             resize_and_display_image(image)
 
@@ -379,7 +377,7 @@ def main():
             select_image_in_treeview(first_image_path)
 
     def on_resize(event):
-        strip_frame.config(height=int(40*7))
+        strip_frame.config(width=int(250))
         nonlocal resize_timer
         if resize_timer is None:
             resize_timer = window.after(round(100), schedule_final_resize)
