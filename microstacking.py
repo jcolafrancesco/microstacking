@@ -202,7 +202,7 @@ def main():
 
     def add_image_to_treeview(image_path):
         image = Image.open(image_path)
-        image.thumbnail((50, 50))  # Adjust thumbnail size to fit within the tree view
+        image.thumbnail((50, 50), Image.NEAREST)  # Adjust thumbnail size to fit within the tree view
         photo = ImageTk.PhotoImage(image)
         parent_folder = os.path.basename(os.path.dirname(image_path))
         if parent_folder == "Capture":
@@ -252,8 +252,8 @@ def main():
                 new_height = int(new_width / image_ratio)
 
             if new_width > 0 and new_height > 0:
-                resized_image = image.resize((new_width, new_height), Image.LANCZOS)
-                photo = ImageTk.PhotoImage(resized_image)
+                image.thumbnail((new_width, new_height), Image.NEAREST)  # Use thumbnail instead of resize
+                photo = ImageTk.PhotoImage(image)
                 full_image_canvas.itemconfig(streaming_image, image=photo)
                 full_image_canvas.coords(streaming_image, frame_width // 2, frame_height // 2)  # Center the image
                 full_image_canvas.photo = photo  # Keep a reference to the PhotoImage object
@@ -381,10 +381,8 @@ def main():
     def on_resize(event):
         strip_frame.config(height=int(40*7))
         nonlocal resize_timer
-        if resize_timer is not None:
-            window.after_cancel(resize_timer)
-        
-        resize_timer = window.after(50, schedule_final_resize)
+        if resize_timer is None:
+            resize_timer = window.after(round(100), schedule_final_resize)
 
     def send_command_to_arduino(command):
         global arduino
