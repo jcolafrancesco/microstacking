@@ -432,16 +432,25 @@ def main():
 
     def connect():
         global arduino
-        tty = tty_combobox.get()
-        baudrate = baudrate_combobox.get()
-        try:
-            arduino = serial.Serial(tty, baudrate)
-            status_label.config(text="Status: Connected", foreground="green")
-            up_button.config(state=tk.NORMAL)
-            down_button.config(state=tk.NORMAL)
-        except Exception as e:
-            print(f"Failed to connect: {e}")
+        if arduino and arduino.is_open:
+            arduino.close()
+            arduino = None
             status_label.config(text="Status: Unconnected", foreground="red")
+            connect_button.config(text="Connect")
+            up_button.config(state=tk.DISABLED)
+            down_button.config(state=tk.DISABLED)
+        else:
+            tty = tty_combobox.get()
+            baudrate = baudrate_combobox.get()
+            try:
+                arduino = serial.Serial(tty, baudrate)
+                status_label.config(text="Status: Connected", foreground="green")
+                connect_button.config(text="Disconnect")
+                up_button.config(state=tk.NORMAL)
+                down_button.config(state=tk.NORMAL)
+            except Exception as e:
+                print(f"Failed to connect: {e}")
+                status_label.config(text="Status: Unconnected", foreground="red")
 
     def populate_combobox(widget_name, combobox):
         try:
@@ -515,7 +524,7 @@ def main():
     status_label.grid(row=4, column=0, columnspan=2, pady=5)
 
     update_ttys()  # Update the list of TTYs at app initialization
-    connect()  # Try to connect to the selected TTY after updating the list
+    window.after(1000, connect)  # Try to connect to the selected TTY after updating the list
 
     angle_label = create_label(manual_controls_frame, "Angle (degrees): ", row=0, column=0)
     angle_spinbox = create_spinbox(manual_controls_frame, from_=0, to=360, row=0, column=1, default_value=15)
