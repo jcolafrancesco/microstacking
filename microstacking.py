@@ -81,15 +81,41 @@ def setup_strip_frame(window):
 def setup_treeview(strip_frame):
     style = ttk.Style()
     style.configure("Treeview", rowheight=40)  # Reduce row height to save space
-
-    treeview = ttk.Treeview(strip_frame, columns=("Image"), show="tree", selectmode='browse', style="Treeview")
+    treeview = ttk.Treeview(strip_frame, columns=("Image"), show="tree", selectmode='extended', style="Treeview")  # Allow multiple selection
+    send_to_zerene_button = ttk.Button(strip_frame, text="Send to Zerene", command=lambda: send_to_zerene(treeview))
+    send_to_zerene_button.pack(side=tk.TOP, fill=tk.X, pady=5)
     treeview.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     scrollbar = ttk.Scrollbar(strip_frame, orient=tk.VERTICAL, command=treeview.yview)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
     treeview.configure(yscrollcommand=scrollbar.set)
     treeview.image_dict = {}
     treeview.image_thumbnails = {}  # Dictionary to store image thumbnails
+    
     return treeview
+
+def send_to_zerene(treeview):
+    selected_items = treeview.selection()
+    if selected_items:
+        folder_paths = []
+        for item in selected_items:
+            parent_item = treeview.parent(item)
+            if not parent_item:
+                folder_name = treeview.item(item, "text")
+                folder_paths.append(os.path.join('Capture', folder_name))
+        
+        if folder_paths:
+            command_file_path = os.path.expanduser("~/.ZereneStacker/zerenstk.launchcmd")
+            if os.path.isfile(command_file_path):
+                with open(command_file_path, "r") as file:
+                    command = file.read().strip()
+                command_with_folders = f"{command} -noSplashScreen {' '.join(folder_paths)}"
+                subprocess.Popen(command_with_folders, shell=True)
+            else:
+                print(f"Command file not found: {command_file_path}")
+        else:
+            print("Please select at least one folder in the tree view.")
+    else:
+        print("No item selected in the tree view.")
 
 def setup_controls(main_frame):
     connection_frame = setup_connection_frame(main_frame)
@@ -142,9 +168,9 @@ def main():
     main_frame = setup_main_frame(window)
     camera_frame = setup_camera_frame(main_frame)
     image_frame = setup_image_frame(window)
-    full_image_canvas, streaming_image = setup_full_image_canvas(image_frame)
     strip_frame = setup_strip_frame(window)
     treeview = setup_treeview(strip_frame)
+    full_image_canvas, streaming_image = setup_full_image_canvas(image_frame)
     connection_frame, manual_controls_frame, stacking_frame = setup_controls(main_frame)
     setup_style()
 
