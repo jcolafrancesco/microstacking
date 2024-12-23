@@ -311,7 +311,7 @@ def main():
             if last_selected_image_path:
                 show_full_image(last_selected_image_path)
 
-    def capture_stack_step(frame_index, num_frames, pre_shot_delay, pre_focus_delay, angle):
+    def capture_stack_step(frame_index, num_frames, pre_shot_delay, angle):
         if stop_capture or frame_index >= num_frames:
             send_command_to_arduino("R")
             launch_button.config(style="TButton")
@@ -319,13 +319,13 @@ def main():
         
         def capture_next_image():
             file_path = capture_image()
-            window.after(round(pre_focus_delay) * 1000, rotate_knob)
+            rotate_knob()
             process_captured_image(file_path, stack_folder)
 
         def rotate_knob():
             send_command_to_arduino(f"U{angle}")
             rot_time = 2 * angle / 360  # Time to rotate the stage by the specified angle
-            window.after(round(rot_time) * 1000, lambda: capture_stack_step(frame_index + 1, num_frames, pre_shot_delay, pre_focus_delay, angle))
+            window.after(round(rot_time) * 1000, lambda: capture_stack_step(frame_index + 1, num_frames, pre_shot_delay, angle))
 
         window.after(round(pre_shot_delay) * 1000, capture_next_image)
 
@@ -334,13 +334,12 @@ def main():
         stop_capture = False
         num_frames = int(frames_spinbox.get())
         pre_shot_delay = int(pre_shot_delay_spinbox.get())
-        pre_focus_delay = int(pre_focus_delay_spinbox.get())
         angle = int(angle_stacking_spinbox.get())
         stack_folder = f"Stack_{time.strftime('%Y%m%d_%H%M%S')}"
         os.makedirs(stack_folder, exist_ok=True)
         send_command_to_arduino("A")
         launch_button.config(style="Green.TButton")
-        capture_stack_step(0, num_frames, pre_shot_delay, pre_focus_delay, angle)
+        capture_stack_step(0, num_frames, pre_shot_delay, angle)
 
     def stop_capture_stack():
         nonlocal stop_capture
@@ -534,9 +533,6 @@ def main():
 
     pre_shot_delay_label = create_label(stacking_frame, "Pre-Shot Delay: ", row=1, column=0)
     pre_shot_delay_spinbox = create_spinbox(stacking_frame, from_=0, to=60, row=1, column=1, default_value=1)
-
-    pre_focus_delay_label = create_label(stacking_frame, "Pre-Focus Delay: ", row=2, column=0)
-    pre_focus_delay_spinbox = create_spinbox(stacking_frame, from_=0, to=60, row=2, column=1, default_value=0)
 
     angle_stacking_label = create_label(stacking_frame, "Angle (degrees): ", row=3, column=0)
     angle_stacking_spinbox = create_spinbox(stacking_frame, from_=0, to=360, row=3, column=1, default_value=30)
