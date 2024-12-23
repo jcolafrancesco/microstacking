@@ -47,7 +47,7 @@ except Exception as e:
 
 def setup_window():
     window = ThemedTk(theme="arc")
-    window.title("Microfocus stacker")
+    window.title("Microstacker")
     window.geometry("1600x900")  # Increased window size
     return window
 
@@ -124,12 +124,12 @@ def setup_controls(main_frame):
     return connection_frame, manual_controls_frame, stacking_frame
 
 def setup_connection_frame(main_frame):
-    connection_frame = ttk.LabelFrame(main_frame, text="Connection", padding="10")
+    connection_frame = ttk.LabelFrame(main_frame, text="Stepper Connection", padding="10")
     connection_frame.pack(pady=10, fill=tk.BOTH, expand=True)
     return connection_frame
 
 def setup_manual_controls_frame(main_frame):
-    manual_controls_frame = ttk.LabelFrame(main_frame, text="Manual Controls", padding="10")
+    manual_controls_frame = ttk.LabelFrame(main_frame, text="Stepper Controls", padding="10")
     manual_controls_frame.pack(pady=10, fill=tk.BOTH, expand=True)
     return manual_controls_frame
 
